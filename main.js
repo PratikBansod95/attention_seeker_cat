@@ -12,7 +12,7 @@ let emojiInterval = null;
 let vibrationInterval = null;
 
 // Messages
-const MSG_IDLE = "Place your finger on screen to feed me";
+const MSG_IDLE = "Keep your finger on screen to feed me";
 const MSG_FEEDING = "Happy Feeding";
 const MSG_CRYING = "Why you stopped, I cry";
 
