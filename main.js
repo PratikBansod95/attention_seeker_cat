@@ -3,18 +3,23 @@ const appTitle = document.getElementById('app-title');
 const introImage = document.getElementById('intro-image');
 const video1 = document.getElementById('video1');
 const video2 = document.getElementById('video2');
+const video3 = document.getElementById('video3');
 const statusText = document.getElementById('status-text');
 const emojiContainer = document.getElementById('emoji-container');
 
 // State
 let hasInteracted = false;
+let isFingerDown = false;
+let isExercising = false; // Video 3 state
 let emojiInterval = null;
 let vibrationInterval = null;
+let exerciseTimer = null;
 
 // Messages
 const MSG_IDLE = "Keep your finger on screen to feed me";
 const MSG_FEEDING = "Happy Feeding";
 const MSG_CRYING = "Why you stopped, I cry";
+const MSG_EXERCISING = "My tummy is full gotta do some exercise";
 
 // Emojis
 const EMOJI_HEART = "❤️"; // Red Heart
@@ -44,9 +49,6 @@ function spawnEmoji(emojiArray) {
   // Random animation duration for variety
   const duration = 2 + Math.random() * 2; // 2s to 4s
   emojiEl.style.animationDuration = `${duration}s`;
-
-  // Random horizontal drift (subtle sine wave effect via transform is hard in pure CSS keyframes without complex setup, 
-  // so we'll just stick to straight up or slight random offset if needed, but simple vertical is often cleaner)
 
   emojiContainer.appendChild(emojiEl);
 
@@ -103,40 +105,30 @@ function stopVibration() {
 
 // --- Main Handlers ---
 
-function handleStart(e) {
-  // Prevent default to stop scrolling/selection, but allow if it's a click to avoid blocking other interactions? 
-  // For this app, we want blocking.
-  if (e.cancelable) e.preventDefault();
-
-  if (!hasInteracted) {
-    // First interaction: Hide intro and title
-    hasInteracted = true;
-    introImage.classList.add('hidden');
-    appTitle.classList.add('hidden');
-    video2.play().catch(e => console.log("Video 2 priming failed", e));
-    video2.pause();
-
-    // Enable sound after interaction
-    video1.muted = false;
-    video2.muted = false;
-  } else {
-    // Subsequent interactions: Switch from video 2 back to video 1
-    video2.classList.add('hidden');
-    video2.pause();
-  }
-
+function startFeeding() {
   // Show Video 1 (Feeding)
   video1.classList.remove('hidden');
   video1.play().catch(e => console.log("Video 1 play failed", e));
 
+  // Ensure others are hidden/paused
+  video2.classList.add('hidden');
+  video2.pause();
+  video3.classList.add('hidden');
+  video3.pause();
+
   // UI Updates
   setStatusText(MSG_FEEDING);
+  appTitle.classList.add('hidden'); // Hide title during feeding
   startEmojiFlow('heart');
   startVibration();
+
+  // Start timer for exercise
+  if (exerciseTimer) clearTimeout(exerciseTimer);
+  exerciseTimer = setTimeout(startExercise, 10000); // 10 seconds
 }
 
-function handleEnd(e) {
-  if (!hasInteracted) return;
+function stopFeeding() {
+  if (exerciseTimer) clearTimeout(exerciseTimer);
 
   // Stop Video 1
   video1.classList.add('hidden');
@@ -146,10 +138,94 @@ function handleEnd(e) {
   video2.classList.remove('hidden');
   video2.play().catch(e => console.log("Video 2 play failed", e));
 
+  // Ensure others are hidden
+  video3.classList.add('hidden');
+  video3.pause();
+
   // UI Updates
-  setStatusText(MSG_CRYING); // Use MSG_CRYING here
+  setStatusText(MSG_CRYING);
+  appTitle.classList.add('hidden');
   startEmojiFlow('cry');
   stopVibration();
+}
+
+function startExercise() {
+  isExercising = true;
+  if (exerciseTimer) clearTimeout(exerciseTimer); // Clear just in case
+
+  // Stop feeding elements
+  video1.classList.add('hidden');
+  video1.pause();
+  stopEmojiFlow(); // No emojis or different ones? Assuming stop based on request implications
+  stopVibration(); // Maybe stop vibration during exercise? Or keep it? Assuming stop for clarity.
+
+  // Play Video 3
+  video3.classList.remove('hidden');
+  video3.currentTime = 0;
+  video3.play().catch(e => console.log("Video 3 play failed", e));
+
+  // UI Update
+  appTitle.textContent = MSG_EXERCISING;
+  appTitle.classList.remove('hidden');
+  setStatusText(""); // Clear bottom text or keep it? StartExercise implies focus on top text.
+}
+
+function onExerciseEnd() {
+  isExercising = false;
+  video3.classList.add('hidden');
+  // Reset title for next time (or keep hidden until needed)
+  appTitle.textContent = MSG_IDLE;
+  appTitle.classList.add('hidden');
+
+  if (isFingerDown) {
+    // Check if user is still holding -> Go back to Feeding
+    startFeeding();
+  } else {
+    // User released -> Go to Crying
+    stopFeeding();
+  }
+}
+
+// Video 3 ended event
+video3.addEventListener('ended', onExerciseEnd);
+
+function handleStart(e) {
+  if (e.cancelable) e.preventDefault();
+
+  // If actively exercising, just update state and ignore
+  if (isExercising) {
+    isFingerDown = true;
+    return;
+  }
+
+  if (!hasInteracted) {
+    hasInteracted = true;
+    introImage.classList.add('hidden');
+    appTitle.classList.add('hidden');
+
+    // Unmute logic
+    video1.muted = false;
+    video2.muted = false;
+    video3.muted = false;
+
+    // Prime videos
+    video2.play().catch(() => { }).then(() => video2.pause());
+    video3.play().catch(() => { }).then(() => video3.pause());
+  }
+
+  isFingerDown = true;
+  startFeeding();
+}
+
+function handleEnd(e) {
+  isFingerDown = false;
+
+  // If exercising, do nothing visual yet; onExerciseEnd determines next step
+  if (isExercising) return;
+
+  if (!hasInteracted) return;
+
+  stopFeeding();
 }
 
 // Add Event Listeners
